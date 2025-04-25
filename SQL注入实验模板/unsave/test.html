@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>注入测试</title>
+        <style>
+            body {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                min-height: 100vh;
+                margin: 0;
+            }
+            #login {
+                width: 300px;
+                padding: 20px;
+                border: 1px solid #ccc;
+                border-radius: 5px;
+            }
+            #login input[type="text"],
+            #login input[type="password"] {
+                width: 100%;
+                box-sizing: border-box;
+                margin: 5px 0;
+            }
+        </style>
+    </head>
+<body>
+    <label for="id">输入用户名与密码</label>
+    <form action="login.php" method='post' id="login">
+        <label for="user">用户：</label>
+        <input name="name" type="text" required="true" id="user">
+        <br>
+        <label for="pwd">密码：</label>
+        <input name="passwd" type="password" required="true" id="pwd">
+        <br>
+        <input value="登录" type="submit">
+    </form>
+</body>
+</html>
