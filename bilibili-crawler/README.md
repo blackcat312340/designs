@@ -2,9 +2,21 @@
 
 ### 前言：这个项目也是我接触爬虫技术以来第一个项目，好在github上有B站的api收集项目[bilibili-api-collect]([bilibili-API-collect/docs/video/player.md at master · SocialSisterYi/bilibili-API-collect · GitHub](https://github.com/SocialSisterYi/bilibili-API-collect/blob/master/docs/video/player.md)),让我不必花很多时间去逆向。做这个项目的本意也是有数据收集的需求，顺便也承接了下阶段网络安全的学习。
 
+--- 
+
+## 当前可用版本
+
+[不使用数据库的版本](Valid-code\NoDatabase\README.md)
+
 ---
 
+
+
 ## 项目简介：
+
+- [Dead code](Dead-code)文件夹下是已经失效的代码
+
+- [Valid code](Valid-code)文件夹下是现在可以运行的代码
 
 - 收集视频信息，如播放量，博主粉丝量，视频字幕，视频描述，与搜索关键词的命中项等等。
 
@@ -13,10 +25,8 @@
 - 本项目不支持多线程爬取(主要是很多接口对cookie有要求，你要是多线程爬会被封大约三四天)
 
 - 如果需要爬取其他数据建议去上面连接里的项目看看，请求的返回类型都是json。
-
-- [Dead code](Dead code)文件夹下是已经失效的代码
-
-- [Vaild code](Vaild code)文件夹下是现在可以运行的代码
+  
+  
 
 ---
 
