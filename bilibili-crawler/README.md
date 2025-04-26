@@ -6,7 +6,7 @@
 
 ## 当前可用版本
 
-[不使用数据库的版本](Valid-code\NoDatabase\README.md)
+[不使用数据库的版本](Valid-code/NoDatabase/README.md)
 
 ---
 
