@@ -12,7 +12,7 @@ Matrix类
 使用omp实现函数内并行
 */
 template <typename T,size_t Rows,size_t Cols>
-class Matrix : public RealMatrixBase<T, Matrix<T, Rows, Cols>, Rows, Cols> {
+class Matrix : public RealMatrixBase<T, Matrix<T,Rows,Cols>, Rows, Cols> {
     public:
         //继承构造函数
         using RealMatrixBase<T,Matrix,Rows,Cols>::RealMatrixBase;
@@ -40,6 +40,17 @@ class Matrix : public RealMatrixBase<T, Matrix<T, Rows, Cols>, Rows, Cols> {
         using RealMatrixBase<T,Matrix,Rows,Cols>::operator*;
         //移动（复制）赋值
         using RealMatrixBase<T,Matrix,Rows,Cols>::operator=;
-        //using MatrixBase<Matrix<Rows,Cols>,Rows,Cols>::det;
-        //using MatrixBase<Matrix<Rows,Cols>,Rows,Cols>::inv;
+        using RealMatrixBase<T,Matrix,Rows,Cols>::det;
+        using RealMatrixBase<T,Matrix,Rows,Cols>::inv;
+        //隐式转换为其他类型的矩阵
+        template <typename U>
+        operator Matrix<U, Rows, Cols>() const {
+            Matrix<U, Rows, Cols> result;
+            for (size_t i = 0; i < Rows; ++i) {
+                for (size_t j = 0; j < Cols; ++j) {
+                    result(i, j) = static_cast<U>(this->data[i][j]);
+                }
+            }
+            return result;
+        }
 };

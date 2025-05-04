@@ -4,20 +4,33 @@
 #include <iomanip>
 #include <optional>
 #include "MatrixBase.hpp"
+#include "LU_Matrix.hpp"
 template <typename T>
 concept Arithmetic = requires(T a, T b) {
     { a + b } -> std::same_as<T>;
     { a - b } -> std::same_as<T>;
     { a * b } -> std::same_as<T>;
     { a / b } -> std::same_as<T>;
-    { a += b } -> std::same_as<T&>;
-    { a -= b } -> std::same_as<T&>;
-    { a *= b } -> std::same_as<T&>;
-    { a /= b } -> std::same_as<T&>;
+    { a += b } ->std::same_as<T&>;
+    { a -= b } ->std::same_as<T&>;
+    { a *= b } ->std::same_as<T&>;
+    { a /= b } ->std::same_as<T&>;
 };
-template <Arithmetic T,typename Derived, size_t Rows, size_t Cols>
+template <Arithmetic T, typename Derived, size_t Rows, size_t Cols>
 class RealMatrixBase :public MatrixBase<T,Derived,Rows,Cols> {
-protected:
+private:
+    // 使用 std::optional 存储 LU_Matrix
+    mutable std::optional<LU_Matrix<MatrixBase<T, Derived, Rows, Cols>>> lu;
+    // 计算 LU 分解
+    void compute_lu() const {
+        if constexpr (is_square) {
+            if (!lu.has_value()) {
+                lu.emplace(static_cast<const Derived&>(*this));
+            }
+        } else {
+            throw std::logic_error("LU decomposition is only available for square matrices.");
+        }
+    }
     static constexpr bool is_square = (Rows == Cols);
 public:
     using MatrixBase<T,Derived,Rows,Cols>::MatrixBase;
@@ -28,6 +41,7 @@ public:
     using MatrixBase<T,Derived,Rows,Cols>::print;
     using MatrixBase<T,Derived,Rows,Cols>::operator();
     using MatrixBase<T,Derived,Rows,Cols>::transpose;
+    using MatrixBase<T,Derived,Rows,Cols>::operator=;
     //获取余子式
     auto get_minor(size_t row, size_t col) const {
         if (row >= Rows || col >= Cols) {
@@ -48,8 +62,8 @@ public:
         return Derived(std::move(sub_data));
     }
     //矩阵加法（函数内并行优化）
-    template <class input, size_t OtherRows, size_t OtherCols>
-    auto operator+(const RealMatrixBase<T,input,OtherRows,OtherCols>& rhs) const {
+    template <typename input, size_t OtherRows, size_t OtherCols>
+    auto operator+(const MatrixBase<T,input,OtherRows,OtherCols>& rhs) const {
         if(Rows != OtherRows || Cols != OtherCols) throw std::invalid_argument("Matrix addition dimension mismatch");
         input result;
         #pragma omp parallel for
@@ -60,8 +74,8 @@ public:
         return result;
     }
     //矩阵减法（函数内并行优化）
-    template <class input, size_t OtherRows, size_t OtherCols>
-    auto operator-(const RealMatrixBase<T,input,OtherRows,OtherCols>& rhs) const {
+    template <typename input,size_t OtherRows, size_t OtherCols>
+    auto operator-(const MatrixBase<T,input,OtherRows,OtherCols>& rhs) const {
         if(Rows != OtherRows || Cols != OtherCols) throw std::invalid_argument("Matrix subtraction dimension mismatch");
         input result;
         #pragma omp parallel for
@@ -72,10 +86,10 @@ public:
         return result;
     }
     //矩阵乘法(函数内并行优化)
-    template <class input, size_t OtherRows, size_t OtherCols>
-    auto operator*(const RealMatrixBase<T,input,OtherRows,OtherCols>& rhs) const {
+    template <typename input,size_t OtherRows, size_t OtherCols>
+    auto operator*(const MatrixBase<T,input,OtherRows,OtherCols>& rhs) const {
         if(Cols != OtherRows) throw std::invalid_argument("Matrix multiplication dimension mismatch");
-        RealMatrixBase<T, input, Rows, OtherCols> result;
+        input result;
         #pragma omp parallel for
         for (size_t i = 0; i < Rows; ++i) {
             for (size_t j = 0; j < OtherCols; ++j) {
@@ -87,8 +101,8 @@ public:
         return result;
     }
     //标量乘法（右乘）
-    auto operator*(double scalar) const {
-        Derived result(Rows,Cols);
+    auto operator*(T scalar) const {
+        Derived result(*static_cast<const Derived*>(this));
         #pragma omp parallel for
         for(size_t i = 0; i < Rows; ++i) {
             for(size_t j = 0; j < Cols; ++j)
@@ -97,75 +111,38 @@ public:
         return result;
     }
     //标量乘法（左乘）
-    template <class input, size_t OtherRows, size_t OtherCols>
-    friend T operator*(double scalar, const RealMatrixBase<T,input,OtherRows,OtherCols>& mat);
-    //移动赋值
-    template <class input, size_t OtherRows, size_t OtherCols>
-    Derived& operator=(MatrixBase<T,input,OtherRows,OtherCols>&& other) noexcept {
-        if(this != &other) {
-            this->data = std::move(other.data);
+    template <typename U, typename D, size_t R, size_t C>
+    friend D operator*(U scalar, const RealMatrixBase<U, D, R, C>& mat);
+    //解行列式
+    T det() const noexcept {
+        if constexpr (is_square) {
+            compute_lu();
+            return lu->determinant();
+        } else {
+            throw std::logic_error("Determinant is only available for square matrices.");
         }
-        return *this;
     }
-    //复制赋值
-    template <class input, size_t OtherRows, size_t OtherCols>
-    Derived& operator=(const MatrixBase<T,input,OtherRows,OtherCols>& other) noexcept{
-        if(this != &other) {
-            this->data = other.data;
+    //矩阵求逆(函数内并行)
+    Derived inv() const {
+        if constexpr (is_square) {
+            compute_lu();
+            return Derived(lu->inverse());
+        } else {
+            throw std::logic_error("inverse is only available for square matrices.");
         }
-        return *this;
     }
-    // //解行列式
-    // template <typename U=Derived>
-    // typename std::enable_if<is_square, double>::type det() const noexcept{
-    //     double determinant = 1.0;
-    //     for (size_t i = 0; i < cols; ++i) {
-    //         determinant *= lu.value().get_U().operator()(i, i);
-    //     }
-    //     if (lu.value().get_swap_count() % 2 != 0) {
-    //         determinant = -determinant;
-    //     }
-    //     return determinant;
-    // }
-    // // 矩阵求逆(函数内并行)
-    // template <typename U=Derived>
-    // typename std::enable_if<is_square, Derived>::type inv() const {
-    //     std::is_same<Derived,Square_Matrix>::value?Derived inverse(size):Derived inverse(size,size);
-    //     // 空矩阵
-    //     std::is_same<Derived,Square_Matrix>::value?Derived identity(size):Derived identity(size,size);
-    //     for (size_t i = 0; i < size; ++i) {
-    //         identity(i, i) = 1.0;
-    //     }
-    //     #pragma omp parallel for
-    //     // 逐列求解逆矩阵
-    //     for (size_t i = 0; i < size; ++i) {
-    //             // 前向替代：解 L * y = b
-    //             std::vector<double> y(size, 0.0);
-    //             for (size_t j = 0; j < size; ++j) {
-    //                 y[j] = identity(j, i);
-    //                 for (size_t k = 0; k < j; ++k) {
-    //                     y[j] -= lu.value().get_L().operator()(j, k) * y[k];
-    //                 }
-    //             }
-    //             // 后向替代：解 U * x = y
-    //             std::vector<double> x(size, 0.0);
-    //             for (int j = size - 1; j >= 0; --j) {
-    //                 x[j] = y[j];
-    //                 for (size_t k = j + 1; k < size; ++k) {
-    //                     x[j] -= lu.value().get_U().operator()(j, k) * x[k];
-    //                 }
-    //                 x[j] /= lu.value().get_U().operator()(j, j);
-    //             }
-    //             // 将结果写入逆矩阵
-    //             for (size_t j = 0; j < size; ++j) {
-    //                 inverse(j, i) = x[j];
-    //             }
-    //     }
-    //     return inverse;
-    // }
+    // 求解线性方程组
+    std::vector<T> LU_solve(const std::vector<T>& b) const {
+        if constexpr (is_square) {
+            compute_lu();
+            return lu->solve(b);
+        } else {
+            throw std::logic_error("LU_solve is only available for square matrices.");
+        }
+    }
 };
 //标量乘法（左乘）定义
-template <typename T, class input, size_t Rows, size_t Cols>
-auto operator*(double scalar, const RealMatrixBase<T,input,Rows,Cols>& mat) {
+template <typename U, typename D, size_t R, size_t C>
+D operator*(U scalar, const RealMatrixBase<U, D, R, C>& mat) {
     return mat * scalar;
 }

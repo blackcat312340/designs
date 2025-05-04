@@ -3,11 +3,13 @@
 #include <memory>
 #include <iomanip>
 #include <optional>
+#include "mod.hpp"
 template <typename T,class Derived, size_t Rows, size_t Cols>
 class MatrixBase {
 protected:
     std::vector<std::vector<T>> data;
 public:
+    using value_type=T;
     // 显式定义拷贝构造函数
     MatrixBase(const MatrixBase& other) noexcept
     : data(other.data){}
@@ -30,26 +32,26 @@ public:
     //行交换
     auto swap(size_t i,size_t j) const {
         if(i >= Rows || j >= Rows) throw std::logic_error("Matrix indices out of range");
-        Derived result(*static_cast<const Derived*>(this));
-        std::swap(result.data[i], result.data[j]);
-        return result;
+        std::vector<std::vector<T>> result = this->data;
+        std::swap(result[i], result[j]);
+        return Derived(result);
     }
     // 矩阵切片(函数内并行优化)
-    template <size_t row_start, size_t row_end, size_t col_start, size_t col_end>
+    template <size_t RowStart, size_t RowEnd, size_t ColStart, size_t ColEnd>
     auto slice() const {
-        if (row_start >= Rows || row_end > Rows || col_start >= Cols || col_end > Cols)
+        if (RowStart >= Rows || RowEnd > Rows || ColStart >= Cols || ColEnd > Cols)
             throw std::out_of_range("Matrix slice indices out of range");
         // 计算子矩阵的行列数（编译期常量）
-        constexpr size_t NewRows = row_end - row_start;
-        constexpr size_t NewCols = col_end - col_start;
-        MatrixBase<T, NewRows, NewCols> result;
+        size_t NewRows = RowEnd - RowStart;
+        size_t NewCols = ColEnd - ColStart;
+        std::vector<std::vector<T>> result(NewRows,std::vector<T>(NewCols,T()));
         #pragma omp parallel for
-        for (size_t i = row_start; i < row_end; ++i) {
-            for (size_t j = col_start; j < col_end; ++j) {
-                result(i - row_start, j - col_start) = this->data[i][j];
+        for (size_t i = RowStart; i < RowEnd; ++i) {
+            for (size_t j = ColStart; j < ColEnd; ++j) {
+                result[i - RowStart][ j - ColStart] = this->data[i][j];
             }
         }
-        return Derived(static_cast<);
+        return Derived(result);
     }
     void print(const std::string& title = "") const {
         std::ostringstream buffer;
@@ -75,13 +77,14 @@ public:
     }
     //得到矩阵转置(函数内并行优化)
     auto transpose() const noexcept{
-        MatrixBase<T, Derived, Cols, Rows> result;
+        std::vector<std::vector<T>> result(Cols, std::vector<T>(Rows, T()));
+        #pragma omp parallel for
         for(size_t i = 0; i < Rows; ++i) {
             for(size_t j = 0; j < Cols; ++j) {
-                result(j,i)= this->data[i][j];
+                result[j][i]= this->data[i][j];
             }
         }
-        return result;
+        return Derived(result);
     }
     //复制赋值
     Derived& operator=(const MatrixBase& other) noexcept {
@@ -95,6 +98,6 @@ public:
         if(this != &other) {
             data = std::move(other.data);
         }
-        return *this;
+        return *static_cast<Derived*>(this);
     }
 };
