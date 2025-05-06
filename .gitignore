@@ -3,3 +3,4 @@ test.cpp
 .vscode/settings.json
 .vscode/c_cpp_properties.json
 test.exe
+.vscode/launch.json
