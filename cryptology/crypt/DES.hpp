@@ -2,6 +2,7 @@
 #include <vector>
 #include <algorithm>
 #include <bitset>
+#include "omp.h"
 class DES {
 private:
     static constexpr int BLOCK_SIZE = 64;  // 数据块大小
@@ -159,12 +160,22 @@ public:
     // S 盒替换
     std::bitset<HALF_BLOCK_SIZE> s_box_substitution(const std::bitset<48>& input) {
         std::bitset<HALF_BLOCK_SIZE> output;
-        for (int i = 0; i < 8; ++i) {
+        for (int i = 0; i < 8; ++i) { // 遍历 8 个 S 盒
+            // 计算当前 6 位输入的行号
+            // 行号由第 1 位和第 6 位组成 (input[i * 6] 和 input[i * 6 + 5])
             int row = (input[i * 6] << 1) | input[i * 6 + 5];
+
+            // 计算当前 6 位输入的列号
+            // 列号由第 2 到第 5 位组成 (input[i * 6 + 1] 到 input[i * 6 + 4])
             int col = (input[i * 6 + 1] << 3) | (input[i * 6 + 2] << 2) |
                       (input[i * 6 + 3] << 1) | input[i * 6 + 4];
+
+            // 根据行号和列号，从第 i 个 S 盒中查找对应的值
             int value = s_boxes[i][row][col];
+
+            // 将 S 盒输出的 4 位值写入到输出的对应位置
             for (int j = 0; j < 4; ++j) {
+                // 提取 value 的第 j 位，并存储到 output 的对应位置
                 output[i * 4 + j] = (value >> (3 - j)) & 1;
             }
         }
@@ -175,29 +186,13 @@ public:
         // 1. 扩展置换
         std::bitset<48> expanded;
         permute(right, expanded, expansion_table);
-        // for(int i = 0; i < 48; ++i) {
-        //     std::cout<<expanded[i];
-        // }
-        // std::cout<<std::endl;
         // 2. 与子密钥异或
         std::bitset<48> xored = expanded ^ subkey;
-        // for(int i = 0; i < 48; ++i) {
-        //     std::cout<<xored[i];
-        // }
-        // std::cout<<std::endl;
         // 3. S 盒替换
         std::bitset<HALF_BLOCK_SIZE> substituted = s_box_substitution(xored);
-        // for(int i = 0; i < HALF_BLOCK_SIZE; ++i) {
-        //     std::cout<<substituted[i];
-        // }
-        // std::cout<<std::endl;
         // 4. P 置换
         std::bitset<HALF_BLOCK_SIZE> permuted;
         permute(substituted, permuted, p_permutation_table);
-        // for(int i = 0; i < HALF_BLOCK_SIZE; ++i) {
-        //     std::cout<<permuted[i];
-        // }
-        // std::cout<<std::endl;
         return permuted;
     }
     // 加密函数
@@ -216,29 +211,52 @@ public:
         for (int i = 0; i < 16; ++i) {
             std::bitset<HALF_BLOCK_SIZE> temp = left;
             left = right;
-            std::bitset<HALF_BLOCK_SIZE> temp2 = feistel(right, key_schedule[i]);
-            // for(int i = 0; i < HALF_BLOCK_SIZE; ++i) {
-            //     std::cout<<temp2[i];
-            // }
-            // std::cout<<std::endl;
             right = temp^feistel(right, key_schedule[i]);
-            // for(int i = 0; i < HALF_BLOCK_SIZE; ++i) {
-            //     std::cout<<left[i];
-            // }
-            // std::cout<<std::endl;
-            // for(int i = 0; i < HALF_BLOCK_SIZE; ++i) {
-            //     std::cout<<right[i];
-            // }
-            // std::cout<<std::endl;
-            // for(int j = 0; j < KEY_SIZE; ++j) {
-            //     std::cout<<key_schedule[i][j];
-            // }
-            // std::cout<<std::endl;
+            std::cout<<"round "<<i<<std::endl;
+            std::cout<<"key: "<<std::endl;
+            for(int j=0; j<48; ++j) {
+                std::cout<<key_schedule[i][j];
+            }
+            std::cout<<std::endl;
+            std::cout<<"left: "<<std::endl;
+            for(int i = 0; i < HALF_BLOCK_SIZE; ++i) {
+                std::cout<<left[i];
+            }
+            std::cout<<std::endl;
+            std::cout<<"right: "<<std::endl;
+            for(int i = 0; i < HALF_BLOCK_SIZE; ++i) {
+                std::cout<<right[i];
+            }
+            std::cout<<std::endl;
         }
         std::bitset<BLOCK_SIZE> combined;
         for (int i = 0; i < HALF_BLOCK_SIZE; ++i) {
-            combined[i] = left[i];
-            combined[i + HALF_BLOCK_SIZE] = right[i];
+            combined[i] = right[i];
+            combined[i + HALF_BLOCK_SIZE] = left[i];
+        }
+        return inverse_permutation(combined);
+    }
+    std::bitset<BLOCK_SIZE> decrypt(const std::bitset<BLOCK_SIZE>& ciphertext, const std::bitset<BLOCK_SIZE>& key) {
+        // 1. 初始置换
+        std::bitset<BLOCK_SIZE> permuted = initial_permutation(ciphertext);
+        // 2. 分割为左右两部分
+        std::bitset<HALF_BLOCK_SIZE> left, right;
+        for (int i = 0; i < HALF_BLOCK_SIZE; ++i) {
+            left[i] = permuted[i];
+            right[i] = permuted[i + HALF_BLOCK_SIZE];
+        }
+        // 3. 生成子密钥
+        generate_subkeys(key);
+        // 4. 16 轮 Feistel 解密
+        for (int i = 15; i >= 0; --i) {
+            std::bitset<HALF_BLOCK_SIZE> temp = left;
+            left = right;
+            right = temp^feistel(right, key_schedule[i]);
+        }
+        std::bitset<BLOCK_SIZE> combined;
+        for (int i = 0; i < HALF_BLOCK_SIZE; ++i) {
+            combined[i] = right[i];
+            combined[i + HALF_BLOCK_SIZE] = left[i];
         }
         return inverse_permutation(combined);
     }
@@ -253,7 +271,6 @@ public:
             left[i] = permuted_key[i];
             right[i] = permuted_key[i + 28];
         }
-        std::cout<<std::endl;
         // 3. 生成 16 轮子密钥
         key_schedule.resize(16);
         for (int round = 0; round < 16; ++round) {
@@ -261,15 +278,6 @@ public:
             int shifts = shift_schedule[round];
             left = left >> shifts | left << (28 - shifts);
             right = right >> shifts | right << (28 - shifts);
-            // for(int i = 0; i < 28; ++i) {
-            //     std::cout<<left[i];
-            // }
-            // std::cout<<std::endl;
-            // for(int i = 0; i < 28; ++i) {
-            //     std::cout<<right[i];
-            // }
-            // std::cout<<std::endl;
-            // 合并左右部分
             std::bitset<56> combined;
             for (int i = 0; i < 28; ++i) {
                 combined[i] = left[i];
@@ -280,3 +288,60 @@ public:
         }
     }
 };
+// 填充函数：对不足 64 比特的块进行填充
+std::vector<std::bitset<64>> pad_blocks(const std::string& plaintext) {
+    size_t total_bits = plaintext.size() * 8; // 每个字符 8 比特
+    size_t num_blocks = (total_bits + 63) / 64; // 计算需要的块数
+
+    // 创建结果容器
+    std::vector<std::bitset<64>> blocks(num_blocks);
+
+    // 使用 OpenMP 并行化处理每个块
+    #pragma omp parallel for
+    for (size_t i = 0; i < num_blocks; ++i) {
+        std::bitset<64> block;
+        for (size_t j = 0; j < 64; ++j) {
+            size_t bit_index = i * 64 + j;
+            if (bit_index < total_bits) {
+                // 将字符转换为二进制位
+                char c = plaintext[bit_index / 8];
+                block[j] = (c >> (7 - (bit_index % 8))) & 1;
+            } else {
+                // 填充 0
+                block[j] = 0;
+            }
+        }
+        blocks[i] = block; // 将结果存储到对应位置
+    }
+
+    return blocks;
+}
+// 将加密后的块转换为字符串
+std::string blocks_to_string(const std::vector<std::bitset<64>>& blocks) {
+    std::string result;
+    for (const auto& block : blocks) {
+        for (size_t i = 0; i < 64; i += 8) {
+            char c = 0;
+            for (size_t j = 0; j < 8; ++j) {
+                c |= (block[i + j] << (7 - j));
+            }
+            result += c;
+        }
+    }
+    return result;
+}
+// 并行加密函数
+std::string parallel_encrypt(const std::string& plaintext, const std::bitset<64>& key, DES& des) {
+    // 对明文进行分块和填充
+    std::vector<std::bitset<64>> blocks = pad_blocks(plaintext);
+
+    // 加密每个块
+    std::vector<std::bitset<64>> encrypted_blocks(blocks.size());
+    #pragma omp parallel for
+    for (size_t i = 0; i < blocks.size(); ++i) {
+        encrypted_blocks[i] = des.encrypt(blocks[i], key);
+    }
+
+    // 将加密后的块转换为字符串
+    return blocks_to_string(encrypted_blocks);
+}

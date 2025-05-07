@@ -3,6 +3,7 @@
 #include <memory>
 #include <iomanip>
 #include "mod.hpp"
+#include "omp.h"
 template <typename T,class Derived>
 class MatrixBase {
 protected:

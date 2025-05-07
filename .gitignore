@@ -4,3 +4,6 @@ test.cpp
 .vscode/c_cpp_properties.json
 test.exe
 .vscode/launch.json
+cryptology/crypt/10mb_test.txt
+10mb_test.txt
+output.txt
